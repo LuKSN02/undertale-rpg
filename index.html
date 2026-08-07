@@ -1,0 +1,1846 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="description" content="Sincronize seu Receptáculo e viva uma ficha de RPG interativa no estilo determinação.">
+<meta name="theme-color" content="#000000">
+<title>* RECEPTÁCULO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   VARIÁVEIS GLOBAIS
+   ============================================================ */
+:root{
+  --color-active:#ff0000;
+  --color-active-rgb:255,0,0;
+  --font-main:'Press Start 2P', monospace, cursive;
+  --font-body:'Share Tech Mono', 'Press Start 2P', monospace;
+  --bg:#000;
+  --panel-border:#ffffff;
+  --text-dim:#8a8a8a;
+  --ease:cubic-bezier(.2,.8,.2,1);
+  --ok:#00ff7a;
+  --warn:#ffe600;
+  --danger:#ff3333;
+}
+
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{
+    animation-duration:0.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:0.01ms !important;
+    scroll-behavior:auto !important;
+  }
+}
+
+*{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body{
+  background:var(--bg); color:#fff;
+  font-family:var(--font-main);
+  width:100%; min-height:100vh;
+  overflow-x:hidden;
+}
+body{
+  display:flex; align-items:center; justify-content:center;
+  min-height:100vh; min-height:100dvh;
+  position:relative;
+}
+[contenteditable]{ cursor:text; outline:none; }
+[contenteditable]{ -webkit-user-select:text; user-select:text; }
+[contenteditable]:focus{ background:rgba(255,255,255,0.06); }
+::selection{ background:var(--color-active); color:#000; }
+button{ font-family:inherit; }
+img{ max-width:100%; display:block; }
+button, .soul-box, .weapon-box, .dice-quick, .peric-roll, .adj-btn,
+.item-btn, #skill-list li, .photo-btn, .btn-confirm, [contenteditable]{
+  touch-action:manipulation;
+}
+
+/* ============================================================
+   ATMOSFERA (CRT + NEVE)
+   ============================================================ */
+.crt-lines{
+  position:fixed; inset:0;
+  background:linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.35) 50%);
+  background-size:100% 3px;
+  z-index:9000; pointer-events:none;
+  opacity:0.6;
+}
+#snow-canvas{
+  position:fixed; inset:0; z-index:0;
+  background:radial-gradient(circle at 50% 40%, rgba(255,255,255,0.03) 0%, #000 75%);
+}
+
+#flash-screen{
+  position:fixed; inset:0; background:#fff; opacity:0;
+  pointer-events:none; z-index:9998;
+}
+.flash-anim{ animation:flashFx .3s var(--ease); }
+@keyframes flashFx{ 0%{opacity:1;} 100%{opacity:0;} }
+
+#slash-effect{
+  position:fixed; top:45%; left:50%; transform:translate(-50%,-50%);
+  font-size:14rem; color:#fff; opacity:0; pointer-events:none;
+  z-index:9997; text-shadow:0 0 30px #fff;
+}
+.slash-anim{ animation:slashFx .4s ease-out; }
+.crit-anim{ animation:slashFx .4s ease-out; color:#ffff00 !important; font-size:18rem !important; text-shadow:0 0 40px #ff0; }
+@keyframes slashFx{
+  0%{ opacity:0; transform:translate(-50%,-50%) scale(.4) rotate(-45deg); }
+  45%{ opacity:1; }
+  100%{ opacity:0; transform:translate(-50%,-50%) scale(1.6) rotate(45deg); }
+}
+
+#dmg-text{
+  position:fixed; top:38%; left:50%; transform:translate(-50%,-50%);
+  font-size:clamp(1.1rem,3vw,1.7rem); color:#ff3333; opacity:0;
+  pointer-events:none; z-index:9997; text-align:center; white-space:pre;
+  text-shadow:0 0 10px rgba(255,0,0,.6);
+}
+.dmg-float{ animation:dmgFloat 1.4s ease-out forwards; }
+@keyframes dmgFloat{
+  0%{ opacity:1; transform:translate(-50%,-50%) scale(1.2); }
+  100%{ opacity:0; transform:translate(-50%,-160%) scale(1); }
+}
+.crit-color{ color:#ffe600 !important; text-shadow:0 0 20px #ffe600, 0 0 6px #000 !important; }
+
+.shake{ animation:shakeFx .25s linear; }
+@keyframes shakeFx{
+  0%,100%{ transform:translate(0,0); }
+  25%{ transform:translate(4px,-3px); }
+  50%{ transform:translate(-4px,3px); }
+  75%{ transform:translate(3px,3px); }
+}
+
+.critical-impact{ animation:critFlash .2s steps(2); }
+@keyframes critFlash{ 0%,100%{ filter:invert(0); } 50%{ filter:invert(1) brightness(1.4); } }
+
+/* ============================================================
+   TELAS (troca por opacidade / display, sem reload)
+   ============================================================ */
+.screen{
+  position:fixed; inset:0; z-index:10;
+  display:none; align-items:center; justify-content:center;
+  flex-direction:column;
+  padding:30px 20px;
+  opacity:0;
+}
+.screen.active{ display:flex; }
+.screen.fade-in{ animation:screenFadeIn .5s var(--ease) forwards; }
+@keyframes screenFadeIn{ from{ opacity:0; transform:scale(.98); } to{ opacity:1; transform:scale(1); } }
+
+.screen.active.tv-off{ animation:crtOff .55s var(--ease) forwards; pointer-events:none; }
+@keyframes crtOff{
+  0%{ transform:scale(1,1); filter:brightness(1); opacity:1; }
+  32%{ transform:scale(1.04,.02); filter:brightness(4); opacity:1; }
+  48%{ transform:scale(1.12,.008); filter:brightness(9); opacity:1; }
+  62%{ transform:scale(.4,.008); filter:brightness(9); opacity:1; }
+  80%{ transform:scale(.02,.008); filter:brightness(6); opacity:1; }
+  100%{ transform:scale(0,0); filter:brightness(1); opacity:0; }
+}
+.crt-off-flash{
+  position:fixed; inset:0; z-index:9999; background:#fff; pointer-events:none;
+  opacity:0; animation:crtFlash .55s var(--ease) forwards;
+}
+@keyframes crtFlash{
+  0%{ opacity:0; } 46%{ opacity:0; } 50%{ opacity:.85; } 62%{ opacity:0; } 100%{ opacity:0; }
+}
+
+/* ============================================================
+   TELA 1 — SELEÇÃO
+   ============================================================ */
+#screen-select{ text-align:center; max-width:1000px; margin:0 auto; }
+.game-title{
+  font-size:clamp(.8rem,2.4vw,1.1rem);
+  letter-spacing:3px; line-height:2; margin-bottom:36px;
+  text-shadow:0 0 12px rgba(255,255,255,.25);
+}
+.receptacle-grid{
+  display:flex; justify-content:center; gap:22px; flex-wrap:wrap;
+  margin-bottom:34px;
+}
+.soul-box{
+  width:120px; height:170px;
+  border:2px solid #444; background:rgba(0,0,0,.85);
+  cursor:pointer; position:relative; overflow:hidden;
+  display:flex; align-items:center; justify-content:center;
+  transition:border-color .15s var(--ease), box-shadow .2s var(--ease), transform .2s var(--ease);
+  image-rendering:pixelated;
+  opacity:0; animation:soulBoxIn .45s var(--ease) forwards;
+  animation-delay:calc(var(--i, 0) * 70ms);
+}
+@keyframes soulBoxIn{
+  from{ opacity:0; transform:translateY(14px) scale(.94); }
+  to{ opacity:1; transform:translateY(0) scale(1); }
+}
+.soul-box:hover{ border-color:var(--color-active); transform:translateY(-4px); box-shadow:0 8px 0 rgba(0,0,0,.6); }
+.soul-box.active{
+  border-color:var(--color-active); border-width:3px;
+  box-shadow:0 0 0 3px rgba(var(--color-active-rgb),.25), 0 0 22px rgba(var(--color-active-rgb),.45);
+}
+.soul-img-display{
+  width:100%; height:100%; object-fit:cover; position:absolute; inset:0;
+  filter:brightness(.28) grayscale(1); transition:filter .4s var(--ease), transform .4s var(--ease);
+  opacity:0;
+}
+.soul-img-display.has-img{ opacity:1; }
+.soul-box.active .soul-img-display{ filter:brightness(1) grayscale(0); transform:scale(1.04); }
+.soul-fallback{ font-size:2.4rem; z-index:1; pointer-events:none; opacity:.35; transition:opacity .3s; }
+.soul-box.active .soul-fallback{ opacity:0; }
+.heart-soul{
+  position:absolute; font-size:1.7rem; z-index:2; pointer-events:none;
+  color:var(--color-active); display:none;
+  animation:heartPulse 1s steps(2) infinite;
+  filter:drop-shadow(0 0 6px currentColor);
+}
+.soul-box.active .heart-soul{ display:block; }
+@keyframes heartPulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.15); } }
+
+.soul-particle{
+  position:absolute; width:3px; height:3px; background:var(--color-active);
+  box-shadow:0 0 6px var(--color-active); pointer-events:none; z-index:3;
+  animation:particleFly 1.4s linear forwards;
+}
+@keyframes particleFly{
+  0%{ transform:translateY(0) scale(1); opacity:1; }
+  100%{ transform:translateY(-90px) translateX(var(--x)) scale(0); opacity:0; }
+}
+
+.photo-btn{
+  position:absolute; bottom:4px; right:4px; z-index:4;
+  width:32px; height:32px; display:flex; align-items:center; justify-content:center;
+  background:rgba(0,0,0,.75); border:2px solid #fff; color:#fff; font-size:.7rem; cursor:pointer;
+  opacity:0; transition:opacity .2s, transform .12s;
+}
+.soul-box:hover .photo-btn, .soul-box:focus-within .photo-btn{ opacity:1; }
+.photo-btn:hover{ background:#fff; color:#000; }
+.photo-btn:active{ transform:scale(.9); }
+.photo-input{ display:none; }
+@media (hover:none){ .photo-btn{ opacity:1; } }
+
+.soul-name{
+  font-size:clamp(.7rem,2vw,.95rem); letter-spacing:5px; color:var(--color-active);
+  text-transform:uppercase; margin-bottom:14px; min-height:1.4em;
+  text-shadow:0 0 10px rgba(var(--color-active-rgb),.5);
+}
+.info-area{
+  border:2px solid #fff; outline:2px solid rgba(255,255,255,.25); outline-offset:5px;
+  padding:20px 24px; max-width:600px; width:100%; min-height:100px;
+  background:rgba(0,0,0,.6); text-align:left; margin:0 auto;
+}
+.desc-label{
+  font-family:var(--font-body);
+  font-size:clamp(.8rem,2.1vw,1rem); line-height:1.9; white-space:pre-line;
+  letter-spacing:.5px; min-height:2.6em;
+}
+
+.btn-confirm{
+  margin-top:32px; background:transparent; border:2px solid #fff; color:#fff;
+  padding:12px 42px; font-family:var(--font-main); font-size:.65rem; letter-spacing:2px;
+  cursor:pointer; transition:.15s var(--ease); position:relative;
+}
+.btn-confirm:hover{ background:#fff; color:#000; box-shadow:0 0 20px rgba(255,255,255,.35); }
+.btn-confirm:active{ transform:scale(.96); }
+.btn-confirm:disabled{ opacity:.3; cursor:not-allowed; }
+
+/* ============================================================
+   TELA 2 — DEBOCHE (MOCK)
+   ============================================================ */
+#screen-mock{ text-align:center; }
+.mock-title{
+  font-size:clamp(1.1rem,3.4vw,1.6rem); letter-spacing:4px; text-transform:uppercase;
+  margin-bottom:28px; min-height:1.4em;
+}
+.mock-desc{
+  font-family:var(--font-body);
+  font-size:clamp(.85rem,2.2vw,1.1rem); max-width:min(80vw,650px); line-height:2.2;
+  letter-spacing:1px; min-height:2.4em;
+}
+.shaking-text{ display:inline-block; animation:jitter .15s infinite; color:var(--color-active); }
+@keyframes jitter{
+  0%{ transform:translate(1px,1px); } 25%{ transform:translate(-1px,-1px); }
+  50%{ transform:translate(1px,-1px); } 75%{ transform:translate(-1px,1px); }
+  100%{ transform:translate(1px,1px); }
+}
+
+/* ============================================================
+   TELA 3 — FICHA DE RPG
+   ============================================================ */
+#screen-sheet{ padding:24px 14px; }
+#rpg-sheet{
+  width:min(880px,94vw);
+  max-height:92vh; max-height:92dvh; overflow-y:auto;
+  border:3px solid #fff; outline:3px solid var(--color-active); outline-offset:6px;
+  background:#000; padding:26px clamp(14px,3vw,30px);
+  box-shadow:0 0 40px rgba(var(--color-active-rgb),.15);
+  transition:box-shadow .3s;
+  scrollbar-width:thin; scrollbar-color:#444 #000;
+}
+#rpg-sheet::-webkit-scrollbar{ width:8px; }
+#rpg-sheet::-webkit-scrollbar-thumb{ background:#333; }
+
+.lv-up-glow{ animation:lvGlow .9s ease-out; }
+@keyframes lvGlow{
+  0%{ box-shadow:0 0 0 rgba(var(--color-active-rgb),0); }
+  50%{ box-shadow:0 0 90px rgba(var(--color-active-rgb),.9); filter:brightness(1.35); }
+  100%{ box-shadow:0 0 40px rgba(var(--color-active-rgb),.15); }
+}
+
+.sheet-header{
+  display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;
+  border-bottom:2px solid #fff; padding-bottom:14px; margin-bottom:18px;
+}
+.sheet-name{
+  font-size:clamp(.7rem,2.2vw,.95rem); color:var(--color-active); text-transform:uppercase; letter-spacing:2px;
+  text-shadow:0 0 8px rgba(var(--color-active-rgb),.5);
+}
+.sheet-lv-info{ font-size:clamp(.45rem,1.4vw,.55rem); color:#fff; }
+
+.hp-section{ display:flex; align-items:center; gap:12px; margin:16px 0; flex-wrap:wrap; }
+.hp-label{ font-size:.6rem; flex-shrink:0; transition:opacity .3s; }
+.hp-bar-border{
+  flex:1; min-width:160px; max-width:320px; height:20px; background:#1a0000;
+  border:2px solid #fff; position:relative; overflow:hidden;
+}
+#hp-fill{ height:100%; width:100%; background:linear-gradient(#ffe066,#ffcc00); transition:width .35s var(--ease); box-shadow:0 0 8px rgba(255,204,0,.5) inset; }
+.hp-low{ animation:hpDanger .5s steps(2) infinite alternate; color:#ff3333 !important; }
+@keyframes hpDanger{ from{ opacity:1; } to{ opacity:.35; } }
+
+/* Barras TP / ABT */
+.bars-stack{
+  display:flex; flex-direction:column; gap:10px; margin:16px 0;
+  padding:14px 16px; border:2px dashed #333;
+}
+.bar-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.bar-row .bar-label{ min-width:32px; font-size:.5rem; }
+.bar-track{ flex:1; min-width:120px; max-width:200px; height:13px; background:#000; border:2px solid #fff; }
+.bar-fill{ height:100%; transition:width .25s steps(6); }
+.bar-fill.tp{ background:#00e0ff; box-shadow:0 0 6px #00e0ff inset; }
+.bar-fill.abt{ background:#00ffb0; box-shadow:0 0 6px #00ffb0 inset; }
+.bar-fill.abt.full{ animation:abtGlow .6s infinite alternate; }
+@keyframes abtGlow{ from{ box-shadow:0 0 5px #00ffb0; } to{ box-shadow:0 0 20px #00ffb0; filter:brightness(1.6); } }
+.bar-val{ font-size:.5rem; min-width:26px; text-align:right; }
+.adj-btn{
+  width:32px; height:32px; display:flex; align-items:center; justify-content:center;
+  background:#000; border:2px solid #fff; color:#fff; cursor:pointer; font-size:.7rem; transition:.12s;
+  flex-shrink:0;
+}
+.adj-btn:hover{ background:#fff; color:#000; }
+.adj-btn:active{ transform:scale(.88); background:var(--color-active); border-color:var(--color-active); color:#000; }
+
+/* Arma */
+.weapon-area{ display:flex; align-items:center; gap:14px; margin:16px 0; flex-wrap:wrap; }
+.dice-quick{
+  font-size:1.9rem; cursor:pointer; filter:drop-shadow(0 0 5px var(--color-active)); transition:transform .15s;
+  min-width:44px; min-height:44px; display:flex; align-items:center; justify-content:center;
+}
+.dice-quick:hover{ transform:scale(1.12) rotate(8deg); }
+.dice-spin{ animation:diceSpin .5s linear; }
+@keyframes diceSpin{ from{ transform:rotate(0); } to{ transform:rotate(360deg); } }
+.weapon-box{
+  width:96px; height:96px; border:3px solid #fff; outline:2px solid rgba(255,255,255,.3); outline-offset:3px;
+  background:#000; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  position:relative; cursor:pointer;
+}
+.weapon-box:hover{ border-color:var(--color-active); }
+.weapon-emoji{ font-size:2rem; filter:drop-shadow(0 0 5px var(--color-active)); }
+.weapon-img{ width:78%; height:60%; object-fit:contain; image-rendering:pixelated; filter:drop-shadow(0 0 5px var(--color-active)); }
+.weapon-txt{
+  position:absolute; bottom:3px; font-size:.36rem; color:#fff; text-transform:uppercase;
+  background:#000; padding:1px 4px; max-width:92%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.weapon-hint{ font-size:.42rem; color:var(--text-dim); max-width:150px; line-height:1.8; }
+
+/* Grid principal */
+.sheet-grid{ display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:6px; }
+.sheet-box{
+  border:2px solid #fff; outline:2px solid rgba(255,255,255,.2); outline-offset:3px;
+  padding:14px; background:#000;
+}
+.sheet-box h3{
+  font-size:.5rem; border-bottom:1px solid #444; padding-bottom:8px; margin-bottom:10px;
+  text-transform:uppercase; letter-spacing:2px; color:#ccc;
+}
+.attr-row{ font-size:.6rem; line-height:2.6; display:flex; align-items:center; gap:8px; }
+.attr-row span[contenteditable]{ min-width:26px; display:inline-block; border-bottom:1px dashed #444; color:var(--color-active); font-weight:bold; }
+
+#inv-list{ list-style:none; font-size:.55rem; min-height:60px; }
+.item-btn{
+  cursor:pointer; display:flex; justify-content:space-between; gap:6px; padding:10px 4px;
+  margin-bottom:4px; transition:.12s; line-height:1.6; border-left:2px solid transparent;
+}
+.item-btn:hover{ background:#fff; color:#000; border-left-color:var(--color-active); padding-left:8px; }
+.item-dissolve{ animation:dissolve .5s forwards; pointer-events:none; }
+@keyframes dissolve{
+  0%{ opacity:1; filter:brightness(2); }
+  100%{ opacity:0; transform:translateY(-16px) scale(1.15); filter:blur(3px); }
+}
+.dust-particle{
+  position:fixed; width:3px; height:3px; background:#fff; pointer-events:none; z-index:9500;
+  animation:dustFly .8s ease-out forwards;
+}
+@keyframes dustFly{ 0%{ transform:translate(0,0); opacity:1; } 100%{ transform:translate(var(--dx),var(--dy)); opacity:0; } }
+.add-item-btn{
+  width:100%; background:none; border:1px dashed #444; color:#666; cursor:pointer;
+  padding:6px; font-size:.42rem; margin-top:4px; transition:.15s;
+}
+.add-item-btn:hover{ border-color:var(--color-active); color:var(--color-active); }
+
+/* Perícias */
+.pericias-grid{ display:grid; grid-template-columns:1fr 1fr; gap:2px 24px; }
+@media (max-width:560px){ .pericias-grid{ grid-template-columns:1fr; } }
+.pericia-row{
+  display:flex; align-items:center; gap:8px; font-size:.55rem; line-height:2.5;
+  border-bottom:1px dotted #222;
+}
+.pericia-row .peric-name{ flex:1; cursor:help; }
+.pericia-row .peric-val{
+  min-width:26px; text-align:center; border-bottom:1px dashed #444; color:var(--color-active); font-weight:bold;
+  padding:6px 2px;
+}
+.pericia-row .peric-roll{
+  cursor:pointer; font-size:.8rem; filter:drop-shadow(0 0 3px var(--color-active)); transition:transform .15s; flex-shrink:0;
+  min-width:32px; min-height:32px; display:flex; align-items:center; justify-content:center;
+}
+.pericia-row .peric-roll:hover{ transform:scale(1.2) rotate(8deg); }
+
+#skill-list{ list-style:none; font-size:.6rem; min-height:40px; }
+#skill-list li{
+  cursor:pointer; display:flex; justify-content:space-between; gap:6px; padding:10px 4px;
+  margin-bottom:4px; transition:.12s; line-height:1.6; border-left:2px solid transparent;
+}
+#skill-list li::before{ content:"- "; color:var(--color-active); }
+#skill-list li:hover{ background:#fff; color:#000; border-left-color:var(--color-active); padding-left:8px; }
+#skill-list li:hover::after{ content:"✕"; font-size:.5rem; opacity:.6; }
+#skill-list .empty-hint{ color:var(--text-dim); font-size:.42rem; cursor:default; }
+#skill-list .empty-hint:hover{ background:none; color:var(--text-dim); border-left-color:transparent; }
+#skill-list .empty-hint::before{ content:""; }
+
+/* Controles */
+.sheet-controls{ display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-top:20px; }
+.btn-sheet{
+  flex:1 1 100px; max-width:130px; text-align:center;
+  background:transparent; border:2px solid #fff; color:#fff;
+  padding:9px 6px; font-size:.44rem; letter-spacing:1px; cursor:pointer;
+  transition:.15s var(--ease); white-space:nowrap;
+}
+.btn-sheet:hover{ background:#fff; color:#000; }
+.btn-sheet:active{ transform:scale(.94); }
+.btn-attack{ color:var(--color-active); border-color:var(--color-active); }
+.btn-restore{ color:#00ff7a; border-color:#00ff7a; }
+.btn-spare{ color:#ffe600; border-color:#ffe600; }
+.btn-magic{ color:#4db8ff; border-color:#4db8ff; }
+.btn-back{ color:#999; border-color:#555; }
+
+#dice-panel{ display:none; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:14px; }
+
+#log-panel{
+  margin-top:16px; height:90px; border:2px solid #333; padding:10px; font-size:.62rem;
+  font-family:var(--font-body); overflow-y:auto; text-align:left; line-height:1.9;
+  background:#050505; color:#8f8f8f; scrollbar-width:thin; scrollbar-color:#444 #050505;
+}
+#log-panel::-webkit-scrollbar{ width:6px; }
+#log-panel::-webkit-scrollbar-thumb{ background:#333; }
+#log-panel span{ display:block; animation:logIn .2s var(--ease); }
+@keyframes logIn{ from{ opacity:0; transform:translateY(-4px); } to{ opacity:1; transform:translateY(0); } }
+
+/* Modais (dado / magia) */
+.modal-overlay{
+  display:none; position:fixed; inset:0; background:rgba(0,0,0,.8); z-index:9600;
+}
+.modal-overlay.active{ display:block; }
+.modal-box{
+  display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+  width:min(360px,88vw); background:#000; border:3px solid #fff; outline:2px solid rgba(255,255,255,.3);
+  outline-offset:3px; padding:22px; z-index:9700; text-align:center;
+}
+.modal-box.active{ display:block; animation:screenFadeIn .25s var(--ease); }
+.modal-box h4{ font-size:.55rem; margin-bottom:16px; letter-spacing:1px; }
+.opt-item{
+  border:2px solid #fff; padding:9px; margin-bottom:8px; cursor:pointer; font-size:.5rem; line-height:1.9; transition:.12s;
+  text-align:left;
+}
+.opt-item:hover{ background:#fff; color:#000; }
+.opt-item small{ display:block; color:#666; }
+.opt-item:hover small{ color:#333; }
+.opt-item.disabled{ opacity:.3; cursor:not-allowed; }
+
+.field-group{ text-align:left; margin-bottom:14px; }
+.field-group label{
+  display:block; font-size:.42rem; letter-spacing:1.5px; color:var(--text-dim);
+  text-transform:uppercase; margin-bottom:6px;
+}
+.field-group input{
+  width:100%; background:#000; border:2px solid #fff; color:#fff;
+  font-family:var(--font-body); font-size:.85rem; padding:9px 10px;
+  transition:border-color .15s var(--ease), box-shadow .15s var(--ease);
+}
+.field-group input:focus{
+  outline:none; border-color:var(--color-active);
+  box-shadow:0 0 0 3px rgba(var(--color-active-rgb),.25);
+}
+.field-group input.input-error{ border-color:var(--danger); }
+.field-error{
+  font-size:.4rem; color:var(--danger); margin-top:6px; min-height:1em; letter-spacing:.5px;
+}
+.modal-actions{ display:flex; gap:8px; margin-top:16px; }
+.modal-actions .btn-sheet{ flex:1; }
+
+#toast-stack{
+  position:fixed; top:18px; left:50%; transform:translateX(-50%);
+  z-index:9900; display:flex; flex-direction:column; gap:8px; align-items:center;
+  pointer-events:none; width:min(92vw,420px);
+}
+.toast{
+  font-family:var(--font-body); font-size:.72rem; letter-spacing:.5px; text-align:center;
+  padding:10px 18px; border:2px solid #fff; background:#000; color:#fff;
+  box-shadow:0 4px 0 rgba(0,0,0,.6); opacity:0; transform:translateY(-10px);
+  animation:toastIn .25s var(--ease) forwards;
+}
+.toast.toast-out{ animation:toastOut .25s var(--ease) forwards; }
+.toast.toast-ok{ border-color:var(--ok); color:var(--ok); }
+.toast.toast-warn{ border-color:var(--warn); color:var(--warn); }
+.toast.toast-danger{ border-color:var(--danger); color:var(--danger); }
+@keyframes toastIn{ to{ opacity:1; transform:translateY(0); } }
+@keyframes toastOut{ to{ opacity:0; transform:translateY(-10px); } }
+
+/* ============================================================
+   TELA 4 — GAME OVER
+   ============================================================ */
+#screen-gameover{ text-align:center; }
+#soul-anchor{ position:relative; width:60px; height:60px; display:flex; align-items:center; justify-content:center; margin-bottom:44px; }
+.go-text{
+  font-size:clamp(.65rem,2vw,.85rem); letter-spacing:3px; opacity:0; transition:opacity 1.4s ease-in;
+  line-height:2.4; margin-bottom:26px;
+}
+#retry-btn{
+  background:transparent; border:2px solid #fff; color:#fff; padding:12px 28px;
+  font-size:.6rem; letter-spacing:2px; cursor:pointer; opacity:0; pointer-events:none; transition:.15s;
+}
+#retry-btn.show{ opacity:1; pointer-events:auto; }
+#retry-btn:hover{ background:#fff; color:#000; }
+
+.soul-shatter-piece{
+  position:absolute; color:#fff; font-size:1.7rem; pointer-events:none;
+  animation:shatterFly 1.1s cubic-bezier(.1,.8,.2,1) forwards;
+}
+@keyframes shatterFly{ 0%{ transform:translate(0,0) rotate(0); opacity:1; } 100%{ transform:translate(var(--dx),var(--dy)) rotate(var(--dr)); opacity:0; } }
+.soul-break{ animation:breakShake .5s linear forwards; }
+@keyframes breakShake{ 0%,100%{ transform:translateX(0); } 25%{ transform:translateX(3px); } 75%{ transform:translateX(-3px); } }
+
+/* ============================================================
+   RESPONSIVO
+   ============================================================ */
+@media (max-width:700px){
+  .sheet-grid{ grid-template-columns:1fr; }
+  .soul-box{ width:96px; height:140px; }
+  .receptacle-grid{ gap:14px; }
+  .weapon-area{ justify-content:center; }
+  .btn-sheet{ flex:1 1 42%; max-width:none; font-size:.5rem; padding:11px 6px; }
+  #rpg-sheet{ padding:18px 14px; }
+  .bar-track{ min-width:90px; }
+  .sheet-controls{ gap:10px; }
+  #dice-panel .btn-sheet{ flex:1 1 44%; }
+}
+@media (max-width:420px){
+  .soul-box{ width:80px; height:120px; }
+  .soul-fallback{ font-size:1.7rem; }
+  .bar-row{ gap:6px; }
+  .bar-label{ min-width:26px !important; }
+  .bar-track{ min-width:70px; max-width:none; }
+  .btn-sheet{ flex:1 1 100%; }
+  .pericia-row{ font-size:.58rem; }
+  .weapon-hint{ max-width:none; text-align:center; }
+  .weapon-area{ text-align:center; }
+  .screen{ padding:20px 12px; }
+  .info-area{ padding:16px 16px; }
+}
+
+.visually-hidden{
+  position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap;
+}
+button:focus-visible, .soul-box:focus-visible, [contenteditable]:focus-visible{
+  outline:2px solid var(--color-active); outline-offset:3px;
+}
+</style>
+</head>
+<body>
+
+<canvas id="snow-canvas"></canvas>
+<div class="crt-lines"></div>
+<div id="flash-screen"></div>
+<div id="slash-effect">/</div>
+<div id="dmg-text" aria-live="polite"></div>
+<div id="toast-stack" aria-live="polite"></div>
+
+<!-- ============================================================
+     TELA 1 — SELEÇÃO DE ALMA
+     ============================================================ -->
+<main id="screen-select" class="screen active fade-in">
+  <h1 class="game-title">* SINCRONIZE O RECEPTÁCULO</h1>
+
+  <div class="receptacle-grid" id="receptacle-grid"><!-- gerado via JS --></div>
+
+  <div class="info-area">
+    <h2 id="name-label" class="soul-name"></h2>
+    <div id="desc-label" class="desc-label"></div>
+  </div>
+
+  <button class="btn-confirm" id="btn-confirm">ACEITAR DESTINO</button>
+</main>
+
+<!-- ============================================================
+     TELA 2 — DEBOCHE
+     ============================================================ -->
+<div id="screen-mock" class="screen">
+  <h2 class="mock-title" id="mock-title"></h2>
+  <div class="mock-desc" id="mock-desc"></div>
+</div>
+
+<!-- ============================================================
+     TELA 3 — FICHA DE RPG
+     ============================================================ -->
+<div id="screen-sheet" class="screen">
+  <div id="rpg-sheet">
+    <div class="sheet-header">
+      <div class="sheet-name" id="sheet-name"></div>
+      <div class="sheet-lv-info">LV <span id="sheet-lv">1</span> &nbsp;·&nbsp; EXP <span id="sheet-exp">0</span>/<span id="next-exp">150</span></div>
+    </div>
+
+    <div class="hp-section">
+      <span class="hp-label" id="hp-label-tag">HP</span>
+      <div class="hp-bar-border"><div id="hp-fill"></div></div>
+      <span class="hp-label"><span id="curr-hp">20</span> / <span id="max-hp">20</span></span>
+      <div class="adj-btn" data-hp-amt="-1" title="Perder 1 HP">−</div>
+      <div class="adj-btn" data-hp-amt="1" title="Recuperar 1 HP">+</div>
+    </div>
+
+    <div class="bars-stack">
+      <div class="bar-row">
+        <span class="bar-label">TP</span>
+        <div class="bar-track"><div class="bar-fill tp" id="tp-fill" style="width:100%"></div></div>
+        <span class="bar-val" id="tp-val">100</span>
+        <div class="adj-btn" data-bar="tp" data-amt="-10">−</div>
+        <div class="adj-btn" data-bar="tp" data-amt="10">+</div>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">ABT</span>
+        <div class="bar-track"><div class="bar-fill abt full" id="abt-fill" style="width:100%"></div></div>
+        <span class="bar-val" id="abt-val">100</span>
+        <div class="adj-btn" data-bar="abt" data-amt="-10">−</div>
+        <div class="adj-btn" data-bar="abt" data-amt="10">+</div>
+      </div>
+    </div>
+
+    <div class="weapon-area">
+      <div class="dice-quick" id="dice-quick" title="Rolar 1d20 rápido">🎲</div>
+      <div class="weapon-box" id="weapon-box" title="Clique para trocar a imagem da arma">
+        <span class="weapon-emoji" id="weapon-emoji">🗡️</span>
+        <img class="weapon-img" id="weapon-img" style="display:none;">
+        <span class="weapon-txt" id="weapon-txt" contenteditable="true" spellcheck="false">FACA DE BRINQUEDO</span>
+        <input type="file" id="weapon-input" class="photo-input" accept="image/*">
+      </div>
+      <div class="weapon-hint">* Clique na caixa para trocar a imagem da arma. Clique no nome para editá-lo.</div>
+    </div>
+
+    <div class="sheet-grid">
+      <div class="col">
+        <div class="sheet-box" style="margin-bottom:16px;">
+          <h3>Atributos</h3>
+          <div class="attr-row">AT: <span contenteditable="true" inputmode="numeric" id="sheet-at">15</span></div>
+          <div class="attr-row">DF: <span contenteditable="true" inputmode="numeric" id="sheet-df">10</span></div>
+        </div>
+        <div class="sheet-box">
+          <h3>Inventário</h3>
+          <ul id="inv-list"></ul>
+          <button class="add-item-btn" id="add-item-btn">[ + ] ADICIONAR ITEM (+10 HP)</button>
+        </div>
+      </div>
+      <div class="col">
+        <div class="sheet-box" style="height:100%;">
+          <h3>Habilidades</h3>
+          <ul id="skill-list"></ul>
+          <button class="add-item-btn" id="add-skill-btn">[ + ] ADICIONAR HABILIDADE</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet-box" style="margin-top:18px;">
+      <h3>Perícias <span style="font-weight:normal; text-transform:none; letter-spacing:0; color:var(--text-dim);">— clique no 🎲 para testar (1d20 + valor)</span></h3>
+      <div class="pericias-grid" id="pericias-grid"></div>
+    </div>
+
+    <div class="sheet-controls" id="sheet-controls">
+      <button class="btn-sheet btn-attack" id="btn-attack">[X] ATAQUE</button>
+      <button class="btn-sheet" id="btn-exp">+ EXP</button>
+      <button class="btn-sheet" id="btn-dmg">DANO</button>
+      <button class="btn-sheet btn-restore" id="btn-restore">RESTAURAR</button>
+      <button class="btn-sheet btn-spare" id="btn-spare">POUPAR</button>
+      <button class="btn-sheet btn-magic" id="btn-magic">MAGIAS</button>
+      <button class="btn-sheet" id="btn-reset" style="color:var(--text-dim); border-color:#555;">RESETAR</button>
+      <button class="btn-sheet btn-back" id="btn-back">« VOLTAR</button>
+    </div>
+
+    <div id="dice-panel">
+      <button class="btn-sheet" data-sides="20">1d20 (PRECISÃO)</button>
+      <button class="btn-sheet" data-sides="12">1d12 (BRUTALIDADE)</button>
+      <button class="btn-sheet" data-sides="8">1d8</button>
+      <button class="btn-sheet" data-sides="6">1d6</button>
+    </div>
+
+    <div id="log-panel"><span>&gt; SISTEMA INICIALIZADO.</span></div>
+  </div>
+</div>
+
+<!-- Modal de magias -->
+<div class="modal-overlay" id="modal-overlay"></div>
+<div class="modal-box" id="win-mag">
+  <h4>* GRIMÓRIO</h4>
+  <div id="mag-list"></div>
+  <button class="btn-sheet" id="close-mag" style="width:100%; margin-top:10px; border-color:#333;">FECHAR</button>
+</div>
+
+<!-- Modal genérico: novo item / nova habilidade -->
+<div class="modal-box" id="win-item-form">
+  <h4 id="item-form-title">* NOVO ITEM</h4>
+  <form id="item-form" novalidate>
+    <div class="field-group">
+      <label for="item-name-input">Nome</label>
+      <input type="text" id="item-name-input" maxlength="40" autocomplete="off">
+      <div class="field-error" id="item-name-error"></div>
+    </div>
+    <div class="field-group" id="item-heal-group">
+      <label for="item-heal-input">Cura (HP)</label>
+      <input type="number" id="item-heal-input" min="0" max="999" step="1" inputmode="numeric">
+      <div class="field-error" id="item-heal-error"></div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-sheet btn-back" id="item-form-cancel" style="border-color:#333;">CANCELAR</button>
+      <button type="submit" class="btn-sheet btn-restore" id="item-form-confirm">CONFIRMAR</button>
+    </div>
+  </form>
+</div>
+
+<!-- Modal de confirmação (resetar ficha) -->
+<div class="modal-box" id="win-confirm">
+  <h4 id="confirm-title">* CONFIRMAR</h4>
+  <p id="confirm-msg" style="font-family:var(--font-body); font-size:.75rem; line-height:1.8; text-align:left; margin-bottom:6px;"></p>
+  <div class="modal-actions">
+    <button type="button" class="btn-sheet btn-back" id="confirm-cancel" style="border-color:#333;">CANCELAR</button>
+    <button type="button" class="btn-sheet" id="confirm-ok" style="color:var(--danger); border-color:var(--danger);">CONFIRMAR</button>
+  </div>
+</div>
+
+<!-- ============================================================
+     TELA 4 — GAME OVER
+     ============================================================ -->
+<div id="screen-gameover" class="screen">
+  <div id="soul-anchor"></div>
+  <div class="go-text" id="go-text">FIQUE DETERMINADO...</div>
+  <button id="retry-btn">TENTAR NOVAMENTE</button>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+/* ================================================================
+   1. DADOS DAS ALMAS
+   ================================================================ */
+const SOULS = {
+  coragem: {
+    label:"CORAGEM", emoji:"❤", color:"#ffa500",
+    desc:"O DESTEMOR DIANTE DO PERIGO.\nVOCÊ É O PRIMEIRO A ENTRAR.",
+    mock:"O ABISMO NÃO SE IMPORTA COM O SEU GRITO.",
+    hp:35, at:20, df:8, weapon:"Luvas Robustas", weaponEmoji:"🥊",
+    img:"./img/coragem.png", weaponImg:"./img/luvas.png",
+    items:[{name:"Luvas Extras",heal:10},{name:"Bife no Rosto",heal:25},{name:"Lanche do Herói",heal:15},{name:"Chá de Batalha",heal:10},{name:"Maçã Gelada",heal:15}],
+    skills:["Investida","Rugido"],
+    magic:[{name:"Impacto Laranja",cost:15,desc:"Atordoa o alvo."},{name:"Investida",cost:60,desc:"Dano crítico garantido."}]
+  },
+  gentileza: {
+    label:"GENTILEZA", emoji:"❤", color:"#ffff00",
+    desc:"O CUIDADO COM O PRÓXIMO.\nSUA LUZ CURA AS FERIDAS.",
+    mock:"O MUNDO VAI DEVORAR VOCÊ COM UM SORRISO.",
+    hp:25, at:10, df:16, weapon:"Frigideira", weaponEmoji:"🍳",
+    img:"./img/gentileza.png", weaponImg:"./img/frigideira.png",
+    items:[{name:"Salada de Flores",heal:25},{name:"Panquecas",heal:10},{name:"Sopa de Almas",heal:20},{name:"Pão Caseiro",heal:15},{name:"Suco de Luz",heal:10}],
+    skills:["Curar","Escudo"],
+    magic:[{name:"Cura Amarela",cost:25,desc:"Restaura 30 HP."},{name:"Escudo",cost:20,desc:"Reduz 80% do dano recebido."}]
+  },
+  empatia: {
+    label:"EMPATIA", emoji:"❤", color:"#ff69b4",
+    desc:"O ELO QUE UNE AS ALMAS.\nVOCÊ SENTE O PULSO DE TODOS.",
+    mock:"SENTIR A DOR DOS OUTROS SÓ VAI TE MATAR MAIS RÁPIDO.",
+    hp:18, at:12, df:12, weapon:"Laço Rosa", weaponEmoji:"🎀",
+    img:"./img/empatia.png", weaponImg:"./img/laco.png",
+    items:[{name:"Chá Sorriso",heal:15},{name:"Laço Extra",heal:8},{name:"Doce Sonho",heal:20},{name:"Biscoito Coração",heal:10},{name:"Água Pura",heal:15}],
+    skills:["Conectar","Sentir"],
+    magic:[{name:"Elo Rosa",cost:15,desc:"Revela as intenções do alvo."},{name:"Abraço",cost:70,desc:"Cura totalmente o HP."}]
+  }
+};
+const SOUL_KEYS = Object.keys(SOULS);
+const STORAGE_PREFIX = "receptaculo_v2_";
+
+/* ================================================================
+   2. ESTADO
+   ================================================================ */
+let currentKey = null;
+let typeTimer = null;
+let audioCtx = null;
+
+function getAudioCtx(){
+  if(!audioCtx){
+    try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch(e){ return null; }
+  }
+  if(audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+}
+function sfx(freq, type, dur, vol, slide=0){
+  const ctx = getAudioCtx();
+  if(!ctx) return;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, ctx.currentTime);
+  if(slide) o.frequency.exponentialRampToValueAtTime(slide, ctx.currentTime + dur);
+  g.gain.setValueAtTime(vol, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+  o.connect(g); g.connect(ctx.destination);
+  o.start(); o.stop(ctx.currentTime + dur);
+}
+
+/* Perícias — baseadas na lista de Ordem Paranormal, adaptadas ao universo Undertale.
+   Teste = 1d20 + valor da perícia (mesmo padrão dos testes de atributo). */
+const PERICIAS_PADRAO = [
+  {name:"Acrobacia",     desc:"Desviar de padrões de ataque e obstáculos"},
+  {name:"Atletismo",     desc:"Correr, saltar e escalar pelo Underground"},
+  {name:"Furtividade",   desc:"Passar despercebido por monstros e áreas"},
+  {name:"Reflexos",      desc:"Reagir rápido a perigos repentinos"},
+  {name:"Resistência",   desc:"Aguentar dor, cansaço e ambientes hostis"},
+  {name:"Percepção",     desc:"Notar detalhes, armadilhas e pistas visuais"},
+  {name:"Investigação",  desc:"Resolver enigmas e encontrar segredos"},
+  {name:"Intuição",      desc:"Sentir as intenções e a ALMA de alguém"},
+  {name:"Enganação",     desc:"Mentir ou blefar de forma convincente"},
+  {name:"Diplomacia",    desc:"Convencer e negociar sem violência (ACT)"},
+  {name:"Intimidação",   desc:"Assustar ou impor respeito"},
+  {name:"Determinação",  desc:"Força de vontade para persistir e resistir"},
+  {name:"Magia",         desc:"Compreender e canalizar magia de ALMA"},
+  {name:"Ciência",       desc:"Lógica, química e mecanismos (estilo CORE)"},
+  {name:"Cura",          desc:"Tratar ferimentos e preparar remédios"},
+  {name:"Luta",          desc:"Combate corpo a corpo"},
+  {name:"Pontaria",      desc:"Ataques à distância e precisão"},
+  {name:"Sobrevivência", desc:"Encontrar comida, abrigo e se orientar"}
+];
+
+function defaultState(key){
+  const s = SOULS[key];
+  return {
+    hp:s.hp, maxHp:s.hp, lv:1, exp:0, nextExp:150,
+    at:s.at, df:s.df, tp:100, abt:100,
+    items: s.items.map(it => ({...it})),
+    skills: [...s.skills],
+    pericias: PERICIAS_PADRAO.map(() => 0),
+    weaponName: s.weapon, weaponImg:null, soulImg:null
+  };
+}
+function loadState(key){
+  try{
+    const raw = localStorage.getItem(STORAGE_PREFIX + key);
+    if(!raw) return defaultState(key);
+    const saved = JSON.parse(raw);
+    const merged = { ...defaultState(key), ...saved };
+    // normaliza pericias salvas (fichas antigas sem o campo, ou lista desatualizada)
+    if(!Array.isArray(merged.pericias) || merged.pericias.length !== PERICIAS_PADRAO.length){
+      const base = PERICIAS_PADRAO.map(() => 0);
+      if(Array.isArray(merged.pericias)){
+        merged.pericias.forEach((v, i) => { if(i < base.length) base[i] = parseInt(v,10) || 0; });
+      }
+      merged.pericias = base;
+    }
+    return merged;
+  }catch(e){ return defaultState(key); }
+}
+function saveState(key, state){
+  try{
+    localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(state));
+    return true;
+  }catch(e){
+    return false;
+  }
+}
+let state = null; // estado da alma atualmente em uso na ficha
+
+/* ================================================================
+   3. UTILITÁRIOS DE UI
+   ================================================================ */
+function $(id){ return document.getElementById(id); }
+
+function hexToRgb(hex){
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `${r}, ${g}, ${b}`;
+}
+function setThemeColor(color){
+  document.documentElement.style.setProperty("--color-active", color);
+  document.documentElement.style.setProperty("--color-active-rgb", hexToRgb(color));
+}
+
+function typeWriter(text, id, callback){
+  const el = $(id);
+  if(!el) return;
+  el.innerHTML = "";
+  clearInterval(typeTimer);
+  let i = 0;
+  typeTimer = setInterval(() => {
+    if(i < text.length){
+      el.innerHTML += text[i] === "\n" ? "<br>" : text[i];
+      if(text[i] !== " " && text[i] !== "\n") sfx(260,"square",0.03,0.02);
+      i++;
+    }else{
+      clearInterval(typeTimer);
+      if(callback) callback();
+    }
+  }, 32);
+}
+
+function log(msg, color="#8f8f8f"){
+  const panel = $("log-panel");
+  if(!panel) return;
+  const line = document.createElement("span");
+  line.style.color = color;
+  line.textContent = "> " + msg;
+  panel.prepend(line);
+  while(panel.children.length > 30) panel.removeChild(panel.lastChild);
+}
+
+function shakeScreen(el){
+  el.classList.remove("shake"); void el.offsetWidth; el.classList.add("shake");
+  setTimeout(() => el.classList.remove("shake"), 260);
+}
+
+function switchScreen(fromId, toId, cb){
+  const from = $(fromId), to = $(toId);
+  if(from) from.classList.remove("active","fade-in");
+  if(to){
+    to.classList.add("active");
+    void to.offsetWidth;
+    to.classList.add("fade-in");
+  }
+  if(cb) cb();
+}
+
+/* ---------- Toasts (substitui alert()) ---------- */
+function showToast(msg, type="", duration=3200){
+  const stack = $("toast-stack");
+  if(!stack) return;
+  const el = document.createElement("div");
+  el.className = "toast" + (type ? ` toast-${type}` : "");
+  el.textContent = msg;
+  stack.appendChild(el);
+  setTimeout(() => {
+    el.classList.add("toast-out");
+    setTimeout(() => el.remove(), 260);
+  }, duration);
+}
+
+/* ---------- Modais genéricos (magia / item / habilidade / confirmação) ---------- */
+let activeModalId = null;
+let lastFocusedEl = null;
+function openModal(id){
+  closeModal();
+  const box = $(id);
+  if(!box) return;
+  lastFocusedEl = document.activeElement;
+  $("modal-overlay").classList.add("active");
+  box.classList.add("active");
+  activeModalId = id;
+  const focusable = box.querySelector("input, button");
+  if(focusable) setTimeout(() => focusable.focus(), 30);
+}
+function closeModal(){
+  if(!activeModalId) return;
+  const box = $(activeModalId);
+  if(box) box.classList.remove("active");
+  $("modal-overlay").classList.remove("active");
+  activeModalId = null;
+  if(lastFocusedEl && lastFocusedEl.focus) lastFocusedEl.focus();
+}
+
+/* ================================================================
+   4. TELA 1 — SELEÇÃO
+   ================================================================ */
+function buildSelectionGrid(){
+  const grid = $("receptacle-grid");
+  grid.innerHTML = "";
+  SOUL_KEYS.forEach((key, idx) => {
+    const soul = SOULS[key];
+    const box = document.createElement("div");
+    box.className = "soul-box" + (idx === 0 ? " active" : "");
+    box.dataset.key = key;
+    box.tabIndex = 0;
+    box.setAttribute("role","button");
+    box.setAttribute("aria-label","Selecionar alma " + soul.label);
+
+    // prioridade: foto enviada pelo jogador (localStorage) > imagem pré-definida no código
+    const savedImg = safeGetImg(key);
+    const srcToUse = savedImg || soul.img || "";
+
+    box.style.setProperty("--i", idx);
+    box.innerHTML = `
+      <img class="soul-img-display${srcToUse ? " has-img" : ""}" id="img-${key}" ${srcToUse ? `src="${srcToUse}"` : ""} alt="Retrato da alma ${soul.label}">
+      <span class="soul-fallback" aria-hidden="true">${soul.emoji}</span>
+      <div class="heart-soul" style="color:${soul.color}" aria-hidden="true">❤</div>
+      <div class="photo-btn" data-key="${key}" title="Escolher foto" aria-label="Escolher foto para ${soul.label}">📷</div>
+      <input type="file" accept="image/*" class="photo-input" id="photo-input-${key}">
+    `;
+    grid.appendChild(box);
+
+    // se a imagem (seja a pré-definida ou a salva) não carregar, volta ao emoji
+    const imgEl = box.querySelector(`#img-${key}`);
+    imgEl.addEventListener("error", () => {
+      imgEl.classList.remove("has-img");
+      imgEl.removeAttribute("src");
+    });
+
+    box.addEventListener("click", (e) => {
+      if(e.target.closest(".photo-btn")) return;
+      selectSoul(key);
+    });
+    box.addEventListener("keydown", (e) => {
+      if(e.key === "Enter" || e.key === " "){ e.preventDefault(); selectSoul(key); }
+    });
+
+    box.querySelector(".photo-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      $(`photo-input-${key}`).click();
+    });
+    box.querySelector(`#photo-input-${key}`).addEventListener("click", e => e.stopPropagation());
+    box.querySelector(`#photo-input-${key}`).addEventListener("change", (e) => handleSoulPhoto(e, key));
+  });
+}
+
+function safeGetImg(key){
+  try{ return localStorage.getItem(`soul_img_${key}`); }catch(e){ return null; }
+}
+
+const MAX_IMG_MB = 4;
+function handleSoulPhoto(event, key){
+  const file = event.target.files && event.target.files[0];
+  if(!file) return;
+  if(!file.type.startsWith("image/")){
+    showToast("Escolha um arquivo de imagem válido.", "danger");
+    event.target.value = "";
+    return;
+  }
+  if(file.size > MAX_IMG_MB * 1024 * 1024){
+    showToast(`Imagem muito grande (máx. ${MAX_IMG_MB}MB).`, "danger");
+    event.target.value = "";
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    const img = $(`img-${key}`);
+    if(img){ img.src = dataUrl; img.alt = SOULS[key].label; img.classList.add("has-img"); }
+    try{
+      localStorage.setItem(`soul_img_${key}`, dataUrl);
+      showToast("Foto da alma atualizada.", "ok");
+    }catch(err){
+      showToast("Imagem carregada, mas não coube no armazenamento local.", "warn");
+    }
+    sfx(700,"sine",0.15,0.08);
+  };
+  reader.onerror = () => showToast("Não foi possível ler a imagem.", "danger");
+  reader.readAsDataURL(file);
+  event.target.value = "";
+}
+
+function selectSoul(key){
+  currentKey = key;
+  const soul = SOULS[key];
+  setThemeColor(soul.color);
+
+  document.querySelectorAll(".soul-box").forEach(box => {
+    box.classList.toggle("active", box.dataset.key === key);
+  });
+
+  $("name-label").textContent = soul.label;
+  typeWriter(soul.desc, "desc-label");
+  sfx(220,"square",0.08,0.06,440);
+  $("btn-confirm").disabled = false;
+}
+
+let transitioning = false;
+function initTransition(){
+  if(!currentKey || transitioning) return;
+  transitioning = true;
+  $("btn-confirm").disabled = true;
+  const ui = $("screen-select");
+  ui.classList.add("tv-off");
+
+  const flash = document.createElement("div");
+  flash.className = "crt-off-flash";
+  document.body.appendChild(flash);
+  setTimeout(() => flash.remove(), 620);
+
+  sfx(800,"sine",0.35,0.12,60);
+  setTimeout(() => sfx(90,"square",0.09,0.16), 260);
+
+  setTimeout(() => {
+    ui.classList.remove("active","fade-in","tv-off");
+    switchScreen(null, "screen-mock", () => {
+      const soul = SOULS[currentKey];
+      $("mock-title").textContent = "";
+      $("mock-desc").innerHTML = "";
+      typeWriter(currentKey.toUpperCase() + "?", "mock-title", () => {
+        setTimeout(() => {
+          typeWriter(soul.mock, "mock-desc", () => {
+            setTimeout(() => {
+              $("screen-mock").classList.remove("active","fade-in");
+              switchScreen(null, "screen-sheet", () => {
+                setupSheet(currentKey);
+                transitioning = false;
+              });
+            }, 1200);
+          });
+        }, 350);
+      });
+    });
+  }, 550);
+}
+
+/* ================================================================
+   5. TELA 3 — FICHA DE RPG
+   ================================================================ */
+function setupSheet(key){
+  const soul = SOULS[key];
+  state = loadState(key);
+  setThemeColor(soul.color);
+
+  $("sheet-name").textContent = soul.label;
+  $("sheet-lv").textContent = state.lv;
+  $("sheet-exp").textContent = state.exp;
+  $("next-exp").textContent = state.nextExp;
+  $("max-hp").textContent = state.maxHp;
+  $("curr-hp").textContent = state.hp;
+  $("sheet-at").textContent = state.at;
+  $("sheet-df").textContent = state.df;
+
+  renderInventory();
+  renderSkills();
+  renderPericias();
+  updateHPBar();
+  updateBar("tp");
+  updateBar("abt");
+  renderWeapon();
+
+  log(`FICHA DE ${soul.label} CARREGADA.`, soul.color);
+  sfx(400,"square",0.3,0.1,600);
+}
+
+function renderInventory(){
+  const list = $("inv-list");
+  list.innerHTML = "";
+  state.items.forEach((item, idx) => {
+    const li = document.createElement("li");
+    li.className = "item-btn";
+    li.innerHTML = `<span>- ${item.name}</span><span>+${item.heal}HP</span>`;
+    li.addEventListener("click", () => useItem(idx, li));
+    list.appendChild(li);
+  });
+}
+
+function useItem(idx, el){
+  const item = state.items[idx];
+  if(!item) return;
+  if(state.hp >= state.maxHp){
+    log("HP JÁ ESTÁ NO MÁXIMO.", "#666");
+    shakeScreen($("rpg-sheet"));
+    return;
+  }
+  sfx(400,"sine",0.05,0.03);
+  state.hp = Math.min(state.maxHp, state.hp + item.heal);
+  updateHPBar(true);
+  sfx(800,"sine",0.4,0.1,1200);
+
+  // poeira + dissolve
+  const rect = el.getBoundingClientRect();
+  for(let i=0;i<8;i++){
+    const p = document.createElement("div");
+    p.className = "dust-particle";
+    p.style.left = rect.left + "px";
+    p.style.top = rect.top + "px";
+    p.style.setProperty("--dx", ((Math.random()-0.5)*60)+"px");
+    p.style.setProperty("--dy", (-(Math.random()*40+20))+"px");
+    document.body.appendChild(p);
+    setTimeout(() => p.remove(), 800);
+  }
+  el.classList.add("item-dissolve");
+  log(`USOU ${item.name.toUpperCase()} (+${item.heal} HP)`, "#00ff7a");
+
+  state.items.splice(idx,1);
+  setTimeout(renderInventory, 480);
+  persist();
+}
+
+function renderSkills(){
+  const list = $("skill-list");
+  list.innerHTML = "";
+  if(!state.skills.length){
+    const li = document.createElement("li");
+    li.className = "empty-hint";
+    li.textContent = "Nenhuma habilidade ainda.";
+    list.appendChild(li);
+    return;
+  }
+  state.skills.forEach((skill, idx) => {
+    const li = document.createElement("li");
+    li.innerHTML = `<span>${skill}</span>`;
+    li.title = "Clique para remover";
+    li.addEventListener("click", () => removeSkill(idx));
+    list.appendChild(li);
+  });
+}
+
+function renderPericias(){
+  const grid = $("pericias-grid");
+  if(!grid) return;
+  grid.innerHTML = "";
+  PERICIAS_PADRAO.forEach((peric, idx) => {
+    const row = document.createElement("div");
+    row.className = "pericia-row";
+    row.innerHTML = `
+      <span class="peric-name" title="${peric.desc}">${peric.name}</span>
+      <span class="peric-val" contenteditable="true" inputmode="numeric" data-idx="${idx}">${state.pericias[idx] || 0}</span>
+      <span class="peric-roll" data-idx="${idx}" title="Testar ${peric.name} (1d20 + valor)">🎲</span>
+    `;
+    grid.appendChild(row);
+  });
+
+  grid.querySelectorAll(".peric-val").forEach(el => {
+    el.addEventListener("input", () => {
+      el.textContent = el.textContent.replace(/[^0-9]/g,"").slice(0,3);
+    });
+    el.addEventListener("blur", () => {
+      let v = parseInt(el.textContent, 10);
+      if(isNaN(v) || v < 0) v = 0;
+      v = Math.min(v, 99);
+      el.textContent = v;
+      const idx = parseInt(el.dataset.idx, 10);
+      if(state){ state.pericias[idx] = v; persist(); }
+    });
+    el.addEventListener("keydown", (e) => { if(e.key === "Enter"){ e.preventDefault(); el.blur(); } });
+  });
+
+  grid.querySelectorAll(".peric-roll").forEach(el => {
+    el.addEventListener("click", () => rollPericia(parseInt(el.dataset.idx,10), el));
+  });
+}
+
+function rollPericia(idx, el){
+  const peric = PERICIAS_PADRAO[idx];
+  const val = state.pericias[idx] || 0;
+  el.classList.add("dice-spin");
+  sfx(600,"square",0.1,0.05);
+  setTimeout(() => {
+    el.classList.remove("dice-spin");
+    const roll = Math.floor(Math.random()*20)+1;
+    const total = roll + val;
+    const isCrit = roll === 20;
+    log(`${peric.name.toUpperCase()} (1d20+${val}): ${roll} + ${val} = ${total}${isCrit ? " (NATURAL 20!)" : ""}`, isCrit ? "#ffe600" : "#fff");
+  }, 480);
+}
+
+function removeSkill(idx){
+  const removed = state.skills.splice(idx,1)[0];
+  renderSkills();
+  persist();
+  if(removed){
+    log(`HABILIDADE REMOVIDA: ${removed.toUpperCase()}`, "#999");
+    sfx(300,"square",0.08,0.04);
+  }
+}
+
+function addSkill(){
+  openItemForm({
+    title: "* NOVA HABILIDADE",
+    showHeal: false,
+    onConfirm: (name) => {
+      if(state.skills.length >= 12){
+        showToast("Limite de 12 habilidades atingido.", "warn");
+        return false;
+      }
+      state.skills.push(name);
+      renderSkills();
+      persist();
+      log(`HABILIDADE APRENDIDA: ${name.toUpperCase()}`, "#4db8ff");
+      sfx(700,"sine",0.15,0.06);
+      return true;
+    }
+  });
+}
+
+function renderWeapon(){
+  const soul = SOULS[currentKey];
+  const emojiEl = $("weapon-emoji"), imgEl = $("weapon-img"), txtEl = $("weapon-txt");
+  txtEl.textContent = state.weaponName || soul.weapon;
+
+  // prioridade: imagem enviada pelo jogador (state.weaponImg) > imagem pré-definida no código (soul.weaponImg)
+  const srcToUse = state.weaponImg || soul.weaponImg || "";
+  if(srcToUse){
+    imgEl.onerror = () => {
+      imgEl.style.display = "none";
+      emojiEl.style.display = "block";
+      emojiEl.textContent = soul.weaponEmoji;
+    };
+    imgEl.alt = state.weaponName || soul.weapon;
+    imgEl.src = srcToUse; imgEl.style.display = "block"; emojiEl.style.display = "none";
+  }else{
+    emojiEl.textContent = soul.weaponEmoji; emojiEl.style.display = "block"; imgEl.style.display = "none";
+  }
+}
+
+function updateHPBar(animate){
+  const pct = Math.max(0, Math.min(100, (state.hp/state.maxHp)*100));
+  $("hp-fill").style.width = pct + "%";
+  $("curr-hp").textContent = state.hp;
+  $("max-hp").textContent = state.maxHp;
+  const isLow = state.hp <= state.maxHp * 0.2 && state.hp > 0;
+  document.querySelectorAll(".hp-label").forEach(l => l.classList.toggle("hp-low", isLow));
+  if(animate){
+    const border = document.querySelector(".hp-bar-border");
+    shakeScreen(border || $("rpg-sheet"));
+  }
+}
+
+function updateBar(type){
+  const fill = $(type + "-fill"), val = $(type + "-val");
+  const v = Math.max(0, Math.min(100, state[type]));
+  fill.style.width = v + "%";
+  val.textContent = v;
+  if(type === "abt") fill.classList.toggle("full", v >= 100);
+}
+
+function adjustBar(type, amt){
+  state[type] = Math.max(0, Math.min(100, state[type] + amt));
+  updateBar(type);
+  sfx(amt > 0 ? 500 : 220, "square", 0.08, 0.05);
+  persist();
+}
+
+/* ---------- HP: ajuste manual 1 a 1 ---------- */
+function adjustHP(amt){
+  if(state.hp <= 0 && amt < 0) return;
+  const wasAlive = state.hp > 0;
+  state.hp = Math.max(0, Math.min(state.maxHp, state.hp + amt));
+  updateHPBar(true);
+  sfx(amt > 0 ? 500 : 150, "square", amt > 0 ? 0.08 : 0.1, 0.08);
+  log(amt > 0 ? `+${amt} HP. HP: ${state.hp}/${state.maxHp}` : `${amt} HP. HP: ${state.hp}/${state.maxHp}`, amt > 0 ? "#00ff7a" : "#ff5555");
+  if(wasAlive && state.hp <= 0){
+    triggerGameOver();
+  }else{
+    persist();
+  }
+}
+
+let persistWarned = false;
+function persist(){
+  if(!currentKey || !state) return;
+  const ok = saveState(currentKey, state);
+  if(!ok && !persistWarned){
+    persistWarned = true;
+    showToast("Não foi possível salvar seu progresso neste dispositivo.", "warn", 4500);
+  }
+}
+
+/* ---------- Ataque (dado principal) ---------- */
+function openDicePanel(){
+  $("sheet-controls").style.display = "none";
+  $("dice-panel").style.display = "flex";
+  sfx(300,"square",0.1,0.05);
+}
+function closeDicePanel(){
+  $("dice-panel").style.display = "none";
+  $("sheet-controls").style.display = "flex";
+}
+function rollAttack(sides){
+  closeDicePanel();
+  const roll = Math.floor(Math.random()*sides)+1;
+  const isCrit = roll === sides;
+  let dmg = roll + state.at + (state.lv - 1) * 2;
+  if(isCrit) dmg = Math.round(dmg * 1.5);
+
+  const slash = $("slash-effect");
+  slash.className = "";
+  void slash.offsetWidth;
+  slash.className = isCrit ? "crit-anim" : "slash-anim";
+  shakeScreen($("rpg-sheet"));
+
+  if(isCrit){
+    const fl = $("flash-screen");
+    fl.classList.remove("flash-anim"); void fl.offsetWidth; fl.classList.add("flash-anim");
+    document.body.classList.add("critical-impact");
+    setTimeout(() => document.body.classList.remove("critical-impact"), 200);
+    sfx(1200,"sawtooth",0.4,0.15,300);
+  }else{
+    sfx(600,"sawtooth",0.3,0.1,100);
+  }
+
+  setTimeout(() => {
+    const t = $("dmg-text");
+    t.textContent = isCrit ? "CRÍTICO!\n" + dmg : "DANO: " + dmg;
+    t.classList.toggle("crit-color", isCrit);
+    t.classList.remove("dmg-float"); void t.offsetWidth; t.classList.add("dmg-float");
+    log(`ATAQUE (1d${sides}): ${dmg}${isCrit ? " (CRÍTICO!)" : ""}`, isCrit ? "#ffe600" : "#fff");
+  }, 180);
+}
+
+/* ---------- EXP / Level up ---------- */
+function addExp(){
+  state.exp++;
+  sfx(1000,"sine",0.05,0.02);
+  if(state.exp >= state.nextExp){
+    state.lv++;
+    state.exp = 0;
+    state.nextExp = state.lv * 150;
+    state.maxHp += 15;
+    state.hp = state.maxHp;
+    state.at += 2;
+    state.df += 1;
+
+    $("sheet-lv").textContent = state.lv;
+    $("next-exp").textContent = state.nextExp;
+    $("sheet-at").textContent = state.at;
+    $("sheet-df").textContent = state.df;
+    updateHPBar();
+
+    const sheet = $("rpg-sheet");
+    sheet.classList.add("lv-up-glow");
+    setTimeout(() => sheet.classList.remove("lv-up-glow"), 900);
+    sfx(500,"square",0.6,0.1,1500);
+    log(`SUBIU PARA O LV ${state.lv}!`, "#ffe600");
+  }
+  $("sheet-exp").textContent = state.exp;
+  persist();
+}
+
+/* ---------- Dano ---------- */
+function takeDamage(){
+  if(state.hp <= 0) return;
+  state.hp = Math.max(0, state.hp - Math.max(1, Math.round(5 - state.df/5)));
+  updateHPBar(true);
+  sfx(150,"sawtooth",0.1,0.1);
+  log(`VOCÊ SOFREU DANO. HP: ${state.hp}/${state.maxHp}`, "#ff5555");
+  if(state.hp <= 0){
+    triggerGameOver();
+  }else{
+    persist();
+  }
+}
+
+/* ---------- Restaurar ---------- */
+function fullRestore(){
+  state.hp = state.maxHp;
+  state.tp = 100;
+  state.abt = 100;
+  updateHPBar(true);
+  updateBar("tp");
+  updateBar("abt");
+  sfx(800,"sine",0.5,0.1);
+  log("HP, TP E ABT TOTALMENTE RESTAURADOS.", "#00ff7a");
+  persist();
+}
+
+/* ---------- Poupar ---------- */
+function spare(){
+  const roll = () => Math.floor(Math.random()*20)+1;
+  const total = roll() + roll();
+  const fl = $("flash-screen");
+  fl.classList.remove("flash-anim"); void fl.offsetWidth;
+  if(total >= 25){
+    fl.style.background = "#00ff00"; fl.classList.add("flash-anim");
+    log(`TENTATIVA DE POUPAR: SUCESSO (${total})`, "#0f0");
+    sfx(800,"sine",0.6,0.1);
+  }else{
+    fl.style.background = "#ff0000"; fl.classList.add("flash-anim");
+    log(`TENTATIVA DE POUPAR: FALHOU (${total})`, "#f00");
+    sfx(100,"sawtooth",0.4,0.1);
+  }
+  setTimeout(() => { fl.style.background = "#fff"; }, 350);
+}
+
+/* ---------- Magias ---------- */
+function openMagic(){
+  const soul = SOULS[currentKey];
+  const list = $("mag-list");
+  list.innerHTML = "";
+  soul.magic.forEach(spell => {
+    const div = document.createElement("div");
+    const affordable = state.tp >= spell.cost;
+    div.className = "opt-item" + (affordable ? "" : " disabled");
+    div.innerHTML = `${spell.name}<small>${spell.cost} TP — ${spell.desc}</small>`;
+    div.addEventListener("click", () => {
+      if(state.tp >= spell.cost){
+        state.tp -= spell.cost;
+        updateBar("tp");
+        sfx(1200,"sine",0.4,0.1);
+        log(`CONJUROU ${spell.name.toUpperCase()} (-${spell.cost} TP)`, soul.color);
+        closeMagic();
+        persist();
+      }else{
+        sfx(100,"sawtooth",0.2,0.1);
+        shakeScreen(div);
+      }
+    });
+    list.appendChild(div);
+  });
+  openModal("win-mag");
+}
+function closeMagic(){ closeModal(); }
+
+/* ---------- Dado rápido decorativo ---------- */
+function rollQuickDice(el){
+  el.classList.add("dice-spin");
+  sfx(600,"square",0.1,0.05);
+  setTimeout(() => {
+    el.classList.remove("dice-spin");
+    const res = Math.floor(Math.random()*20)+1;
+    log(`DADO RÁPIDO (1d20): ${res}`, res === 20 ? "#ffe600" : "#fff");
+  }, 480);
+}
+
+/* ---------- Arma: upload de imagem ---------- */
+function handleWeaponPhoto(event){
+  const file = event.target.files && event.target.files[0];
+  if(!file) return;
+  if(!file.type.startsWith("image/")){
+    showToast("Escolha um arquivo de imagem válido.", "danger");
+    event.target.value = "";
+    return;
+  }
+  if(file.size > MAX_IMG_MB * 1024 * 1024){
+    showToast(`Imagem muito grande (máx. ${MAX_IMG_MB}MB).`, "danger");
+    event.target.value = "";
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    state.weaponImg = e.target.result;
+    renderWeapon();
+    persist();
+    showToast("Imagem da arma atualizada.", "ok");
+  };
+  reader.onerror = () => showToast("Não foi possível ler a imagem.", "danger");
+  reader.readAsDataURL(file);
+  event.target.value = "";
+}
+
+/* ---------- Adicionar item personalizado ---------- */
+function addCustomItem(){
+  openItemForm({
+    title: "* NOVO ITEM",
+    showHeal: true,
+    onConfirm: (name, heal) => {
+      if(state.items.length >= 20){
+        showToast("Limite de 20 itens atingido.", "warn");
+        return false;
+      }
+      state.items.push({ name, heal });
+      renderInventory();
+      persist();
+      log(`ITEM ADICIONADO: ${name.toUpperCase()} (+${heal}HP)`, "#00ff7a");
+      sfx(500,"sine",0.1,0.05);
+      return true;
+    }
+  });
+}
+
+/* ---------- Formulário genérico (item / habilidade) ---------- */
+let itemFormHandler = null;
+function openItemForm({ title, showHeal, onConfirm }){
+  $("item-form-title").textContent = title;
+  $("item-heal-group").style.display = showHeal ? "block" : "none";
+  const nameInput = $("item-name-input"), healInput = $("item-heal-input");
+  nameInput.value = "";
+  nameInput.classList.remove("input-error");
+  $("item-name-error").textContent = "";
+  healInput.value = showHeal ? "10" : "";
+  healInput.classList.remove("input-error");
+  $("item-heal-error").textContent = "";
+  itemFormHandler = onConfirm;
+  openModal("win-item-form");
+}
+
+function submitItemForm(e){
+  e.preventDefault();
+  const nameInput = $("item-name-input"), healInput = $("item-heal-input");
+  const showHeal = $("item-heal-group").style.display !== "none";
+  let valid = true;
+  const name = nameInput.value.trim().slice(0,40);
+
+  nameInput.classList.remove("input-error"); $("item-name-error").textContent = "";
+  healInput.classList.remove("input-error"); $("item-heal-error").textContent = "";
+
+  if(!name){
+    nameInput.classList.add("input-error");
+    $("item-name-error").textContent = "Digite um nome.";
+    valid = false;
+  }
+
+  let heal = 0;
+  if(showHeal){
+    heal = parseInt(healInput.value, 10);
+    if(isNaN(heal) || heal < 0 || heal > 999){
+      healInput.classList.add("input-error");
+      $("item-heal-error").textContent = "Use um número entre 0 e 999.";
+      valid = false;
+    }
+  }
+
+  if(!valid) return;
+  if(itemFormHandler && itemFormHandler(name, heal) === false) return;
+  closeModal();
+}
+
+/* ---------- Confirmação genérica (usada pelo reset da ficha) ---------- */
+let confirmHandler = null;
+function openConfirm({ title, msg, onConfirm }){
+  $("confirm-title").textContent = title;
+  $("confirm-msg").textContent = msg;
+  confirmHandler = onConfirm;
+  openModal("win-confirm");
+}
+
+function resetSheet(){
+  if(!currentKey) return;
+  const soul = SOULS[currentKey];
+  openConfirm({
+    title: "* RESETAR FICHA",
+    msg: `Isso restaura HP, atributos, itens e habilidades de ${soul.label} para os valores padrão. As fotos enviadas não serão apagadas. Esta ação não pode ser desfeita.`,
+    onConfirm: () => {
+      const keepWeaponImg = state.weaponImg;
+      state = defaultState(currentKey);
+      state.weaponImg = keepWeaponImg;
+      persist();
+      setupSheet(currentKey);
+      showToast("Ficha resetada para os valores padrão.", "ok");
+    }
+  });
+}
+
+/* ---------- Voltar para a seleção ---------- */
+function backToSelect(){
+  persist();
+  $("screen-sheet").classList.remove("active","fade-in");
+  $("screen-select").classList.add("active");
+  void $("screen-select").offsetWidth;
+  $("screen-select").classList.add("fade-in");
+  currentKey = null;
+  $("btn-confirm").disabled = true;
+  $("name-label").textContent = "";
+  $("desc-label").textContent = "";
+  document.querySelectorAll(".soul-box").forEach(b => b.classList.remove("active"));
+}
+
+/* ================================================================
+   6. TELA 4 — GAME OVER
+   ================================================================ */
+function triggerGameOver(){
+  const goScreen = $("screen-gameover");
+  const anchor = $("soul-anchor");
+  anchor.innerHTML = '<span id="dying-soul" style="color:#fff; font-size:3.4rem; display:block;">❤</span>';
+  $("go-text").style.opacity = "0";
+  $("go-text").textContent = "";
+  $("retry-btn").classList.remove("show");
+
+  $("screen-sheet").classList.remove("active","fade-in");
+  goScreen.classList.add("active");
+  void goScreen.offsetWidth;
+  goScreen.classList.add("fade-in");
+  sfx(100,"sawtooth",0.5,0.3);
+
+  setTimeout(() => {
+    const soul = $("dying-soul");
+    if(soul) soul.classList.add("soul-break");
+    sfx(80,"square",0.1,0.2);
+
+    setTimeout(() => {
+      if(soul) soul.style.display = "none";
+      for(let i=0;i<12;i++){
+        const p = document.createElement("div");
+        p.className = "soul-shatter-piece";
+        p.textContent = "❤";
+        p.style.setProperty("--dx", ((Math.random()-0.5)*640)+"px");
+        p.style.setProperty("--dy", ((Math.random()-0.5)*640)+"px");
+        p.style.setProperty("--dr", (Math.random()*720)+"deg");
+        anchor.appendChild(p);
+      }
+      sfx(40,"sawtooth",0.8,0.2,10);
+
+      setTimeout(() => {
+        $("go-text").style.opacity = "1";
+        typeWriter("FIQUE DETERMINADO...", "go-text");
+        $("retry-btn").classList.add("show");
+        playGameOverTheme();
+      }, 1400);
+    }, 1000);
+  }, 1400);
+}
+
+function playGameOverTheme(){
+  const notes = [196,164,146,130];
+  notes.forEach((f,i) => setTimeout(() => sfx(f,"sine",1.4,0.05), i*950));
+}
+
+function retryGame(){
+  // reseta o estado da alma atual para os valores padrão
+  if(currentKey){
+    state = defaultState(currentKey);
+    saveState(currentKey, state);
+  }
+  $("screen-gameover").classList.remove("active","fade-in");
+  $("soul-anchor").innerHTML = "";
+  backToSelect();
+}
+
+/* ================================================================
+   7. NEVE DE FUNDO
+   ================================================================ */
+function initSnow(){
+  const canvas = $("snow-canvas");
+  const ctx = canvas.getContext("2d");
+  let flakes = [];
+  function resize(){
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    flakes = Array.from({length:90}, () => ({
+      x:Math.random()*canvas.width, y:Math.random()*canvas.height, s:Math.random()*1+0.4
+    }));
+  }
+  function loop(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--color-active") || "#fff";
+    flakes.forEach(p => {
+      ctx.beginPath();
+      ctx.globalAlpha = 0.5;
+      ctx.arc(p.x,p.y,1.4,0,Math.PI*2);
+      ctx.fill();
+      p.y += p.s;
+      p.x += Math.sin(p.y*0.01)*0.4;
+      if(p.y > canvas.height) p.y = -5;
+      if(p.x > canvas.width) p.x = 0;
+      if(p.x < 0) p.x = canvas.width;
+    });
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(loop);
+  }
+  window.addEventListener("resize", resize);
+  resize();
+  loop();
+}
+
+/* ================================================================
+   8. VALIDAÇÃO DE CAMPOS EDITÁVEIS (AT / DF / arma / habilidades)
+   ================================================================ */
+function bindEditableStat(id, key){
+  const el = $(id);
+  el.addEventListener("input", () => {
+    el.textContent = el.textContent.replace(/[^0-9]/g,"").slice(0,4);
+  });
+  el.addEventListener("blur", () => {
+    let v = parseInt(el.textContent, 10);
+    if(isNaN(v) || v < 0) v = 0;
+    v = Math.min(v, 999);
+    el.textContent = v;
+    if(state){ state[key] = v; persist(); }
+  });
+  el.addEventListener("keydown", (e) => { if(e.key === "Enter"){ e.preventDefault(); el.blur(); } });
+}
+
+function bindWeaponName(){
+  const el = $("weapon-txt");
+  el.addEventListener("blur", () => {
+    let name = el.textContent.trim().slice(0,30) || SOULS[currentKey].weapon;
+    el.textContent = name;
+    if(state){ state.weaponName = name; persist(); }
+  });
+  el.addEventListener("keydown", (e) => { if(e.key === "Enter"){ e.preventDefault(); el.blur(); } });
+}
+
+/* ================================================================
+   9. LIGAÇÃO DE EVENTOS
+   ================================================================ */
+function bindEvents(){
+  $("btn-confirm").addEventListener("click", initTransition);
+
+  $("btn-attack").addEventListener("click", openDicePanel);
+  document.querySelectorAll("#dice-panel button").forEach(btn => {
+    btn.addEventListener("click", () => rollAttack(parseInt(btn.dataset.sides,10)));
+  });
+  $("btn-exp").addEventListener("click", addExp);
+  $("btn-dmg").addEventListener("click", takeDamage);
+  $("btn-restore").addEventListener("click", fullRestore);
+  $("btn-spare").addEventListener("click", spare);
+  $("btn-magic").addEventListener("click", openMagic);
+  $("btn-back").addEventListener("click", backToSelect);
+  $("btn-reset").addEventListener("click", resetSheet);
+  $("close-mag").addEventListener("click", closeModal);
+  $("modal-overlay").addEventListener("click", closeModal);
+
+  document.querySelectorAll(".adj-btn[data-bar]").forEach(btn => {
+    btn.addEventListener("click", () => adjustBar(btn.dataset.bar, parseInt(btn.dataset.amt,10)));
+  });
+  document.querySelectorAll(".adj-btn[data-hp-amt]").forEach(btn => {
+    btn.addEventListener("click", () => adjustHP(parseInt(btn.dataset.hpAmt,10)));
+  });
+
+  $("dice-quick").addEventListener("click", (e) => rollQuickDice(e.currentTarget));
+  $("weapon-box").addEventListener("click", (e) => {
+    if(e.target === $("weapon-txt")) return; // permite editar o nome sem abrir o upload
+    $("weapon-input").click();
+  });
+  $("weapon-input").addEventListener("click", e => e.stopPropagation());
+  $("weapon-input").addEventListener("change", handleWeaponPhoto);
+
+  $("add-item-btn").addEventListener("click", addCustomItem);
+  $("add-skill-btn").addEventListener("click", addSkill);
+
+  $("item-form").addEventListener("submit", submitItemForm);
+  $("item-form-cancel").addEventListener("click", closeModal);
+
+  $("confirm-cancel").addEventListener("click", closeModal);
+  $("confirm-ok").addEventListener("click", () => {
+    if(confirmHandler) confirmHandler();
+    closeModal();
+  });
+
+  $("retry-btn").addEventListener("click", retryGame);
+
+  bindEditableStat("sheet-at", "at");
+  bindEditableStat("sheet-df", "df");
+  bindWeaponName();
+
+  // atalho de teclado: ESC fecha qualquer modal aberto
+  document.addEventListener("keydown", (e) => {
+    if(e.key === "Escape") closeModal();
+  });
+}
+
+/* ================================================================
+   10. INICIALIZAÇÃO
+   ================================================================ */
+function init(){
+  buildSelectionGrid();
+  bindEvents();
+  initSnow();
+  selectSoul(SOUL_KEYS[0]);
+  $("btn-confirm").disabled = false;
+}
+
+document.addEventListener("DOMContentLoaded", init);
+})();
+</script>
+</body>
+</html>
